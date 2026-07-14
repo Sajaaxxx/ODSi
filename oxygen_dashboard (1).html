@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oxygen Delivery System</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for the SpO2 Plot -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* Custom toggle switch styling */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #3B82F6;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #3B82F6;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans antialiased p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto space-y-6">
+        
+        <!-- Header & Alarm Banner -->
+        <header class="bg-white rounded-xl shadow-md p-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Patient Dashboard</h1>
+                <p class="text-sm text-gray-500">Automated Oxygen Delivery System</p>
+            </div>
+            <div id="connectionStatus" class="px-4 py-2 rounded-full bg-yellow-100 text-yellow-800 font-semibold text-sm">
+                Waiting for Data...
+            </div>
+        </header>
+
+        <!-- CRITICAL ALARM BANNER (Hidden by default) -->
+        <div id="alarmBanner" class="hidden bg-red-600 text-white rounded-xl shadow-lg p-4 flex items-center justify-center animate-pulse">
+            <svg class="w-8 h-8 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <span class="text-xl font-bold">CRITICAL: SpO2 Below 88%</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Left Column: Controls -->
+            <div class="space-y-6">
+                
+                <!-- System Mode Card -->
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-lg font-bold text-gray-700 mb-4">System Mode</h2>
+                    <div class="flex items-center justify-between">
+                        <span id="modeText" class="font-semibold text-blue-600 text-lg">AUTO</span>
+                        
+                        <!-- Toggle Switch -->
+                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="toggle" id="modeToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+                            <label for="modeToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual Flow Control Card -->
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-lg font-bold text-gray-700 mb-4">Flow Rate</h2>
+                    
+                    <div class="text-center mb-4">
+                        <span id="flowRateDisplay" class="text-5xl font-extrabold text-gray-900">0.0</span>
+                        <span class="text-gray-500 font-semibold">LPM</span>
+                    </div>
+
+                    <div>
+                        <label for="flowSlider" class="block text-sm font-medium text-gray-700 mb-1">Manual Override</label>
+                        <input type="range" id="flowSlider" min="0" max="11" step="1" value="0" disabled
+                            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-not-allowed opacity-50">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0</span>
+                            <span>15 LPM</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Chart -->
+            <div class="md:col-span-2 bg-white rounded-xl shadow-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-gray-700">Live SpO2 Variation</h2>
+                    <span id="currentSpO2Display" class="text-2xl font-bold text-green-500">-- %</span>
+                </div>
+                <div class="relative h-64 w-full">
+                    <canvas id="spo2Chart"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Firebase SDKs (Modular V9) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // ==========================================
+        // 1. FIREBASE CONFIGURATION
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyC-znFMjOMKPl2bEZ4IZilFz3CP-MXQfzU",
+            authDomain: "ods-i-47684.firebaseapp.com",
+            databaseURL: "https://ods-i-47684-default-rtdb.firebaseio.com",
+            projectId: "ods-i-47684",
+            storageBucket: "ods-i-47684.firebasestorage.app",
+            messagingSenderId: "473711209741",
+            appId: "1:473711209741:web:193fc95f4e155bcbef5444",
+            measurementId: "G-38G4HMBF8X"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // ==========================================
+        // 2. UI LOGIC & CHART SETUP
+        // ==========================================
+        
+        const lpm_values = [0, 0.5, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15];
+        
+        // DOM Elements
+        const modeToggle = document.getElementById('modeToggle');
+        const modeText = document.getElementById('modeText');
+        const flowSlider = document.getElementById('flowSlider');
+        const flowRateDisplay = document.getElementById('flowRateDisplay');
+        const currentSpO2Display = document.getElementById('currentSpO2Display');
+        const alarmBanner = document.getElementById('alarmBanner');
+        const connectionStatus = document.getElementById('connectionStatus');
+
+        // Setup Chart.js
+        const ctx = document.getElementById('spo2Chart').getContext('2d');
+        const maxDataPoints = 30; // Keep last 30 readings on screen
+        
+        const spo2Chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array(maxDataPoints).fill(''),
+                datasets: [{
+                    label: 'SpO2 Level (%)',
+                    data: Array(maxDataPoints).fill(null),
+                    borderColor: '#10B981', // Tailwind Green 500
+                    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        min: 70,
+                        max: 100,
+                        title: { display: true, text: 'SpO2 %' }
+                    },
+                    x: {
+                        display: false // Hide time labels for cleaner look
+                    }
+                },
+                animation: { duration: 0 } // Instant updates
+            }
+        });
+
+        // Function to push new data to chart
+        function updateChart(newSpO2) {
+            const data = spo2Chart.data.datasets[0].data;
+            data.push(newSpO2);
+            if (data.length > maxDataPoints) data.shift(); // Remove oldest
+            spo2Chart.update();
+        }
+
+        // ==========================================
+        // 3. EVENT LISTENERS (Sending Data to ESP32)
+        // ==========================================
+        
+        // Handle Auto/Manual Switch
+        modeToggle.addEventListener('change', (e) => {
+            const isManual = e.target.checked;
+            
+            if (isManual) {
+                modeText.textContent = "MANUAL";
+                modeText.className = "font-semibold text-orange-500 text-lg";
+                flowSlider.disabled = false;
+                flowSlider.classList.remove('cursor-not-allowed', 'opacity-50');
+            } else {
+                modeText.textContent = "AUTO";
+                modeText.className = "font-semibold text-blue-600 text-lg";
+                flowSlider.disabled = true;
+                flowSlider.classList.add('cursor-not-allowed', 'opacity-50');
+            }
+
+            // Send Mode to Firebase (1 = Manual, 0 = Auto)
+            set(ref(db, 'control/mode'), isManual ? 1 : 0);
+        });
+
+        // Handle Slider Movement
+        flowSlider.addEventListener('input', (e) => {
+            const sliderIndex = parseInt(e.target.value);
+            flowRateDisplay.textContent = lpm_values[sliderIndex].toFixed(1);
+            
+            // Send new flow rate to Firebase
+            set(ref(db, 'control/manualIndex'), sliderIndex);
+        });
+
+        // ==========================================
+        // 4. ACTUAL FIREBASE LISTENERS (LIVE DATA)
+        // ==========================================
+        connectionStatus.textContent = "Connecting to Cloud...";
+        connectionStatus.className = "px-4 py-2 rounded-full bg-yellow-100 text-yellow-800 font-semibold text-sm";
+
+        // Listen for SpO2 updates from ESP32
+        onValue(ref(db, 'device/spo2'), (snapshot) => {
+            const val = snapshot.val();
+            if (val !== null) {
+                currentSpO2Display.textContent = val + " %";
+                updateChart(val);
+
+                // Handle Alarm Logic
+                if (val > 0 && val <= 88) {
+                    alarmBanner.classList.remove('hidden');
+                    currentSpO2Display.className = "text-2xl font-bold text-red-600";
+                    spo2Chart.data.datasets[0].borderColor = '#DC2626'; // Red
+                } else if (val > 88) {
+                    alarmBanner.classList.add('hidden');
+                    currentSpO2Display.className = "text-2xl font-bold text-green-500";
+                    spo2Chart.data.datasets[0].borderColor = '#10B981'; // Green
+                }
+                
+                connectionStatus.textContent = "Live Data Connected";
+                connectionStatus.className = "px-4 py-2 rounded-full bg-green-100 text-green-800 font-semibold text-sm";
+            }
+        });
+
+        // Listen for Motor Flow Index updates from ESP32
+        onValue(ref(db, 'device/flowIndex'), (snapshot) => {
+            if(!modeToggle.checked) { // Only update UI slider automatically if we are in AUTO mode
+                const index = snapshot.val();
+                if (index !== null) {
+                    flowSlider.value = index;
+                    flowRateDisplay.textContent = lpm_values[index].toFixed(1);
+                }
+            }
+        });
+        
+        // Keep UI synced if another device changes the mode
+        onValue(ref(db, 'control/mode'), (snapshot) => {
+            const isManual = snapshot.val() === 1;
+            if (modeToggle.checked !== isManual) {
+                modeToggle.checked = isManual;
+                modeToggle.dispatchEvent(new Event('change'));
+            }
+        });
+    </script>
+</body>
+</html>
