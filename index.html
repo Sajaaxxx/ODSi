@@ -146,10 +146,10 @@
         const spo2Chart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: Array(maxDataPoints).fill(''),
+                labels: [],
                 datasets: [{
                     label: 'SpO2 Level (%)',
-                    data: Array(maxDataPoints).fill(null),
+                    data: [],
                     borderColor: '#10B981', // Tailwind Green 500
                     backgroundColor: 'rgba(16, 185, 129, 0.2)',
                     borderWidth: 3,
@@ -168,18 +168,30 @@
                         title: { display: true, text: 'SpO2 %' }
                     },
                     x: {
-                        display: false // Hide time labels for cleaner look
+                        display: true,
+                        title: { display: true, text: 'Time' },
+                        ticks: { maxTicksLimit: 6, autoSkip: true }
                     }
                 },
                 animation: { duration: 0 } // Instant updates
             }
         });
 
-        // Function to push new data to chart
+        // Function to push new data (with a timestamp label) to the chart
         function updateChart(newSpO2) {
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString('en-GB'); // HH:MM:SS
+
+            const labels = spo2Chart.data.labels;
             const data = spo2Chart.data.datasets[0].data;
+
+            labels.push(timeLabel);
             data.push(newSpO2);
-            if (data.length > maxDataPoints) data.shift(); // Remove oldest
+
+            if (data.length > maxDataPoints) {
+                data.shift();   // Remove oldest point
+                labels.shift(); // Remove its matching time label
+            }
             spo2Chart.update();
         }
 
