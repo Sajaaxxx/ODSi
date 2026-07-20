@@ -31,19 +31,16 @@
             </div>
         </header>
 
-        <!-- CRITICAL SPO2 ALARM BANNER -->
         <div id="alarmBanner" class="hidden bg-red-600 text-white rounded-xl shadow-lg p-4 flex items-center justify-center animate-pulse">
             <svg class="w-8 h-8 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
             <span class="text-xl font-bold">CRITICAL: SpO2 Below 88%</span>
         </div>
 
-        <!-- NEW: FINGER REMOVED BANNER -->
         <div id="fingerBanner" class="hidden bg-gray-700 text-white rounded-xl shadow-lg p-4 flex items-center justify-center animate-pulse">
             <svg class="w-8 h-8 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"></path></svg>
             <span class="text-xl font-bold">SENSOR ERROR: FINGER REMOVED</span>
         </div>
 
-        <!-- MUTED ALARM BANNER -->
         <div id="mutedBanner" class="hidden bg-orange-500 text-white rounded-xl shadow-lg p-4 flex items-center justify-center">
             <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25M3 18v-6a9 9 0 0118 0v6"></path></svg>
             <span class="text-lg font-bold">Alarm silenced — staff attending</span>
@@ -61,6 +58,15 @@
                             <input type="checkbox" name="toggle" id="modeToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
                             <label for="modeToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
                         </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Heart Rate Card -->
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <h2 class="text-lg font-bold text-gray-700 mb-2">Heart Rate</h2>
+                    <div class="text-center">
+                        <span id="heartRateDisplay" class="text-5xl font-extrabold text-pink-500">--</span>
+                        <span class="text-gray-500 font-semibold">bpm</span>
                     </div>
                 </div>
 
@@ -93,11 +99,28 @@
             </div>
 
         </div>
+
+        <!-- NEW: Full-Day History Chart -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-gray-700">History (last 24 hours)</h2>
+                <button id="refreshHistoryBtn" class="px-3 py-1 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600">
+                    Refresh
+                </button>
+            </div>
+            <div class="relative h-72 w-full">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import {
+            getDatabase, ref, onValue, set,
+            query, orderByChild, limitToLast, get
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
           apiKey: "AIzaSyC9QuiOzVItn8l12ZI_MzLAfzFdHgQ0GrQ",
@@ -119,11 +142,14 @@
         const flowSlider = document.getElementById('flowSlider');
         const flowRateDisplay = document.getElementById('flowRateDisplay');
         const currentSpO2Display = document.getElementById('currentSpO2Display');
+        const heartRateDisplay = document.getElementById('heartRateDisplay'); // NEW
         const alarmBanner = document.getElementById('alarmBanner');
         const fingerBanner = document.getElementById('fingerBanner');
         const mutedBanner = document.getElementById('mutedBanner');
         const connectionStatus = document.getElementById('connectionStatus');
+        const refreshHistoryBtn = document.getElementById('refreshHistoryBtn'); // NEW
 
+        // --- Live chart (last ~30 pts, seconds-scale) ---
         const ctx = document.getElementById('spo2Chart').getContext('2d');
         const maxDataPoints = 30;
 
@@ -146,16 +172,8 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: {
-                        min: 70,
-                        max: 100,
-                        title: { display: true, text: 'SpO2 %' }
-                    },
-                    x: {
-                        display: true,
-                        title: { display: true, text: 'Time' },
-                        ticks: { maxTicksLimit: 6, autoSkip: true }
-                    }
+                    y: { min: 70, max: 100, title: { display: true, text: 'SpO2 %' } },
+                    x: { display: true, title: { display: true, text: 'Time' }, ticks: { maxTicksLimit: 6, autoSkip: true } }
                 },
                 animation: { duration: 0 }
             }
@@ -176,9 +194,85 @@
             spo2Chart.update();
         }
 
+        // --- NEW: 24-hour history chart, SpO2 + Heart Rate together ---
+        const historyCtx = document.getElementById('historyChart').getContext('2d');
+        const historyChart = new Chart(historyCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'SpO2 (%)',
+                        data: [],
+                        borderColor: '#10B981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Heart Rate (bpm)',
+                        data: [],
+                        borderColor: '#EC4899',
+                        backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    y:  { min: 70, max: 100, position: 'left', title: { display: true, text: 'SpO2 %' } },
+                    y1: { min: 40, max: 180, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Heart Rate (bpm)' } },
+                    x:  { title: { display: true, text: 'Time' }, ticks: { maxTicksLimit: 8, autoSkip: true } }
+                }
+            }
+        });
+
+        // Pulls the last 500 history records from Firebase (roughly the last
+        // ~24h at the firmware's 3-min logging interval) and redraws the chart.
+        async function loadHistory() {
+            try {
+                const historyQuery = query(ref(db, 'history'), orderByChild('timestamp'), limitToLast(500));
+                const snapshot = await get(historyQuery);
+
+                const labels = [];
+                const spo2Data = [];
+                const hrData = [];
+
+                snapshot.forEach((child) => {
+                    const entry = child.val();
+                    if (entry.timestamp) {
+                        labels.push(new Date(entry.timestamp).toLocaleString('en-GB', {
+                            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
+                        }));
+                        spo2Data.push(entry.spo2 ?? null);
+                        hrData.push(entry.heartRate ?? null);
+                    }
+                });
+
+                historyChart.data.labels = labels;
+                historyChart.data.datasets[0].data = spo2Data;
+                historyChart.data.datasets[1].data = hrData;
+                historyChart.update();
+            } catch (err) {
+                console.error("Failed to load history:", err);
+            }
+        }
+
+        refreshHistoryBtn.addEventListener('click', loadHistory);
+        loadHistory();                          // initial load
+        setInterval(loadHistory, 60000);         // auto-refresh every 60s
+
         // --- Alarm state tracking ---
-        let spo2Alarm = false;      // true when SpO2 <= 88
-        let fingerRemoved = false;  // true when sensor has no valid reading
+        let spo2Alarm = false;
+        let fingerRemoved = false;
         let buzzerMuted = false;
         let lastSpo2Value = null;
 
@@ -229,7 +323,6 @@
         connectionStatus.textContent = "Connecting to Cloud...";
         connectionStatus.className = "px-4 py-2 rounded-full bg-yellow-100 text-yellow-800 font-semibold text-sm";
 
-        // SpO2 value — updates the number + threshold alarm only
         onValue(ref(db, 'device/spo2'), (snapshot) => {
             const val = snapshot.val();
             if (val === null) return;
@@ -247,19 +340,22 @@
             updateAlarmBanners();
         });
 
-        // NEW: finger-removed status
+        // NEW: heart rate
+        onValue(ref(db, 'device/heartRate'), (snapshot) => {
+            const val = snapshot.val();
+            heartRateDisplay.textContent = (val && val > 0) ? val : "--";
+        });
+
         onValue(ref(db, 'device/fingerRemoved'), (snapshot) => {
             fingerRemoved = snapshot.val() === true;
             if (fingerRemoved) {
                 currentSpO2Display.textContent = "-- %";
                 currentSpO2Display.className = "text-2xl font-bold text-gray-400";
+                heartRateDisplay.textContent = "--";
             }
             updateAlarmBanners();
         });
 
-        // NEW: heartbeat — fires every ~1s regardless of whether spo2 changed,
-        // so the chart plots a continuous line against real time instead of
-        // only updating when the SpO2 number itself changes
         onValue(ref(db, 'device/timestamp'), () => {
             if (!fingerRemoved && lastSpo2Value !== null) {
                 updateChart(lastSpo2Value);
