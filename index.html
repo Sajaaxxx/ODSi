@@ -4,13 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Oxygen Delivery System</title>
-    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js for the SpO2 Plot -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        /* Custom toggle switch styling */
         .toggle-checkbox:checked {
             right: 0;
             border-color: #3B82F6;
@@ -24,7 +21,6 @@
 
     <div class="max-w-4xl mx-auto space-y-6">
 
-        <!-- Header & Alarm Banner -->
         <header class="bg-white rounded-xl shadow-md p-6 flex justify-between items-center">
             <div>
                 <h1 class="text-3xl font-bold text-gray-900">Patient Dashboard</h1>
@@ -35,13 +31,19 @@
             </div>
         </header>
 
-        <!-- CRITICAL ALARM BANNER (Hidden by default) -->
+        <!-- CRITICAL SPO2 ALARM BANNER -->
         <div id="alarmBanner" class="hidden bg-red-600 text-white rounded-xl shadow-lg p-4 flex items-center justify-center animate-pulse">
             <svg class="w-8 h-8 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
             <span class="text-xl font-bold">CRITICAL: SpO2 Below 88%</span>
         </div>
 
-        <!-- MUTED ALARM BANNER (shown when the alarm condition is still active but a nurse has silenced the buzzer) -->
+        <!-- NEW: FINGER REMOVED BANNER -->
+        <div id="fingerBanner" class="hidden bg-gray-700 text-white rounded-xl shadow-lg p-4 flex items-center justify-center animate-pulse">
+            <svg class="w-8 h-8 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"></path></svg>
+            <span class="text-xl font-bold">SENSOR ERROR: FINGER REMOVED</span>
+        </div>
+
+        <!-- MUTED ALARM BANNER -->
         <div id="mutedBanner" class="hidden bg-orange-500 text-white rounded-xl shadow-lg p-4 flex items-center justify-center">
             <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25M3 18v-6a9 9 0 0118 0v6"></path></svg>
             <span class="text-lg font-bold">Alarm silenced — staff attending</span>
@@ -49,16 +51,12 @@
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-            <!-- Left Column: Controls -->
             <div class="space-y-6">
 
-                <!-- System Mode Card -->
                 <div class="bg-white rounded-xl shadow-md p-6">
                     <h2 class="text-lg font-bold text-gray-700 mb-4">System Mode</h2>
                     <div class="flex items-center justify-between">
                         <span id="modeText" class="font-semibold text-blue-600 text-lg">AUTO</span>
-
-                        <!-- Toggle Switch -->
                         <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
                             <input type="checkbox" name="toggle" id="modeToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
                             <label for="modeToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
@@ -66,15 +64,12 @@
                     </div>
                 </div>
 
-                <!-- Manual Flow Control Card -->
                 <div class="bg-white rounded-xl shadow-md p-6">
                     <h2 class="text-lg font-bold text-gray-700 mb-4">Flow Rate</h2>
-
                     <div class="text-center mb-4">
                         <span id="flowRateDisplay" class="text-5xl font-extrabold text-gray-900">0.0</span>
                         <span class="text-gray-500 font-semibold">LPM</span>
                     </div>
-
                     <div>
                         <label for="flowSlider" class="block text-sm font-medium text-gray-700 mb-1">Manual Override</label>
                         <input type="range" id="flowSlider" min="0" max="11" step="1" value="0" disabled
@@ -87,7 +82,6 @@
                 </div>
             </div>
 
-            <!-- Right Column: Chart -->
             <div class="md:col-span-2 bg-white rounded-xl shadow-md p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-lg font-bold text-gray-700">Live SpO2 Variation</h2>
@@ -101,14 +95,10 @@
         </div>
     </div>
 
-    <!-- Firebase SDKs (Modular V9) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // ==========================================
-        // 1. FIREBASE CONFIGURATION
-        // ==========================================
         const firebaseConfig = {
           apiKey: "AIzaSyC9QuiOzVItn8l12ZI_MzLAfzFdHgQ0GrQ",
           authDomain: "aods-56fba.firebaseapp.com",
@@ -119,29 +109,23 @@
           appId: "1:3966627215:web:39ea54226ef1579d97affa"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // ==========================================
-        // 2. UI LOGIC & CHART SETUP
-        // ==========================================
-
         const lpm_values = [0, 0.5, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15];
 
-        // DOM Elements
         const modeToggle = document.getElementById('modeToggle');
         const modeText = document.getElementById('modeText');
         const flowSlider = document.getElementById('flowSlider');
         const flowRateDisplay = document.getElementById('flowRateDisplay');
         const currentSpO2Display = document.getElementById('currentSpO2Display');
         const alarmBanner = document.getElementById('alarmBanner');
+        const fingerBanner = document.getElementById('fingerBanner');
         const mutedBanner = document.getElementById('mutedBanner');
         const connectionStatus = document.getElementById('connectionStatus');
 
-        // Setup Chart.js
         const ctx = document.getElementById('spo2Chart').getContext('2d');
-        const maxDataPoints = 30; // Keep last 30 readings on screen
+        const maxDataPoints = 30;
 
         const spo2Chart = new Chart(ctx, {
             type: 'line',
@@ -150,7 +134,7 @@
                 datasets: [{
                     label: 'SpO2 Level (%)',
                     data: [],
-                    borderColor: '#10B981', // Tailwind Green 500
+                    borderColor: '#10B981',
                     backgroundColor: 'rgba(16, 185, 129, 0.2)',
                     borderWidth: 3,
                     tension: 0.4,
@@ -173,15 +157,12 @@
                         ticks: { maxTicksLimit: 6, autoSkip: true }
                     }
                 },
-                animation: { duration: 0 } // Instant updates
+                animation: { duration: 0 }
             }
         });
 
-        // Function to push new data (with a timestamp label) to the chart
         function updateChart(newSpO2) {
-            const now = new Date();
-            const timeLabel = now.toLocaleTimeString('en-GB'); // HH:MM:SS
-
+            const timeLabel = new Date().toLocaleTimeString('en-GB');
             const labels = spo2Chart.data.labels;
             const data = spo2Chart.data.datasets[0].data;
 
@@ -189,38 +170,42 @@
             data.push(newSpO2);
 
             if (data.length > maxDataPoints) {
-                data.shift();   // Remove oldest point
-                labels.shift(); // Remove its matching time label
+                data.shift();
+                labels.shift();
             }
             spo2Chart.update();
         }
 
-        // Tracks the two independent Firebase flags that together decide
-        // which banner (if any) to show.
-        let spo2AlarmActive = false;
+        // --- Alarm state tracking ---
+        let spo2Alarm = false;      // true when SpO2 <= 88
+        let fingerRemoved = false;  // true when sensor has no valid reading
         let buzzerMuted = false;
+        let lastSpo2Value = null;
 
         function updateAlarmBanners() {
-            if (spo2AlarmActive && buzzerMuted) {
+            const alarmActive = fingerRemoved || spo2Alarm;
+
+            if (alarmActive && buzzerMuted) {
                 alarmBanner.classList.add('hidden');
+                fingerBanner.classList.add('hidden');
                 mutedBanner.classList.remove('hidden');
-            } else if (spo2AlarmActive) {
+            } else if (fingerRemoved) {
+                fingerBanner.classList.remove('hidden');
+                alarmBanner.classList.add('hidden');
+                mutedBanner.classList.add('hidden');
+            } else if (spo2Alarm) {
                 alarmBanner.classList.remove('hidden');
+                fingerBanner.classList.add('hidden');
                 mutedBanner.classList.add('hidden');
             } else {
                 alarmBanner.classList.add('hidden');
+                fingerBanner.classList.add('hidden');
                 mutedBanner.classList.add('hidden');
             }
         }
 
-        // ==========================================
-        // 3. EVENT LISTENERS (Sending Data to ESP32)
-        // ==========================================
-
-        // Handle Auto/Manual Switch
         modeToggle.addEventListener('change', (e) => {
             const isManual = e.target.checked;
-
             if (isManual) {
                 modeText.textContent = "MANUAL";
                 modeText.className = "font-semibold text-orange-500 text-lg";
@@ -232,59 +217,64 @@
                 flowSlider.disabled = true;
                 flowSlider.classList.add('cursor-not-allowed', 'opacity-50');
             }
-
-            // Send Mode to Firebase (1 = Manual, 0 = Auto)
             set(ref(db, 'control/mode'), isManual ? 1 : 0);
         });
 
-        // Handle Slider Movement
         flowSlider.addEventListener('input', (e) => {
             const sliderIndex = parseInt(e.target.value);
             flowRateDisplay.textContent = lpm_values[sliderIndex].toFixed(1);
-
-            // Send new flow rate to Firebase
             set(ref(db, 'control/manualIndex'), sliderIndex);
         });
 
-        // ==========================================
-        // 4. ACTUAL FIREBASE LISTENERS (LIVE DATA)
-        // ==========================================
         connectionStatus.textContent = "Connecting to Cloud...";
         connectionStatus.className = "px-4 py-2 rounded-full bg-yellow-100 text-yellow-800 font-semibold text-sm";
 
-        // Listen for SpO2 updates from ESP32
+        // SpO2 value — updates the number + threshold alarm only
         onValue(ref(db, 'device/spo2'), (snapshot) => {
             const val = snapshot.val();
-            if (val !== null) {
+            if (val === null) return;
+
+            lastSpo2Value = val;
+            spo2Alarm = (val > 0 && val <= 88);
+
+            if (!fingerRemoved) {
                 currentSpO2Display.textContent = val + " %";
-                updateChart(val);
-
-                // Handle Alarm Logic
-                if (val > 0 && val <= 88) {
-                    spo2AlarmActive = true;
-                    currentSpO2Display.className = "text-2xl font-bold text-red-600";
-                    spo2Chart.data.datasets[0].borderColor = '#DC2626'; // Red
-                } else if (val > 88) {
-                    spo2AlarmActive = false;
-                    currentSpO2Display.className = "text-2xl font-bold text-green-500";
-                    spo2Chart.data.datasets[0].borderColor = '#10B981'; // Green
-                }
-                updateAlarmBanners();
-
-                connectionStatus.textContent = "Live Data Connected";
-                connectionStatus.className = "px-4 py-2 rounded-full bg-green-100 text-green-800 font-semibold text-sm";
+                currentSpO2Display.className = spo2Alarm
+                    ? "text-2xl font-bold text-red-600"
+                    : "text-2xl font-bold text-green-500";
+                spo2Chart.data.datasets[0].borderColor = spo2Alarm ? '#DC2626' : '#10B981';
             }
+            updateAlarmBanners();
         });
 
-        // Listen for the ESP32's D25 mute button
+        // NEW: finger-removed status
+        onValue(ref(db, 'device/fingerRemoved'), (snapshot) => {
+            fingerRemoved = snapshot.val() === true;
+            if (fingerRemoved) {
+                currentSpO2Display.textContent = "-- %";
+                currentSpO2Display.className = "text-2xl font-bold text-gray-400";
+            }
+            updateAlarmBanners();
+        });
+
+        // NEW: heartbeat — fires every ~1s regardless of whether spo2 changed,
+        // so the chart plots a continuous line against real time instead of
+        // only updating when the SpO2 number itself changes
+        onValue(ref(db, 'device/timestamp'), () => {
+            if (!fingerRemoved && lastSpo2Value !== null) {
+                updateChart(lastSpo2Value);
+            }
+            connectionStatus.textContent = "Live Data Connected";
+            connectionStatus.className = "px-4 py-2 rounded-full bg-green-100 text-green-800 font-semibold text-sm";
+        });
+
         onValue(ref(db, 'device/muted'), (snapshot) => {
             buzzerMuted = snapshot.val() === true;
             updateAlarmBanners();
         });
 
-        // Listen for Motor Flow Index updates from ESP32
         onValue(ref(db, 'device/flowIndex'), (snapshot) => {
-            if(!modeToggle.checked) { // Only update UI slider automatically if we are in AUTO mode
+            if(!modeToggle.checked) {
                 const index = snapshot.val();
                 if (index !== null) {
                     flowSlider.value = index;
@@ -293,7 +283,6 @@
             }
         });
 
-        // Keep UI synced if another device changes the mode
         onValue(ref(db, 'control/mode'), (snapshot) => {
             const isManual = snapshot.val() === 1;
             if (modeToggle.checked !== isManual) {
