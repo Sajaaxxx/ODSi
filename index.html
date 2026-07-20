@@ -41,6 +41,12 @@
             <span class="text-xl font-bold">CRITICAL: SpO2 Below 88%</span>
         </div>
 
+        <!-- MUTED ALARM BANNER (shown when the alarm condition is still active but a nurse has silenced the buzzer) -->
+        <div id="mutedBanner" class="hidden bg-orange-500 text-white rounded-xl shadow-lg p-4 flex items-center justify-center">
+            <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25M3 18v-6a9 9 0 0118 0v6"></path></svg>
+            <span class="text-lg font-bold">Alarm silenced — staff attending</span>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             <!-- Left Column: Controls -->
@@ -130,6 +136,7 @@
         const flowRateDisplay = document.getElementById('flowRateDisplay');
         const currentSpO2Display = document.getElementById('currentSpO2Display');
         const alarmBanner = document.getElementById('alarmBanner');
+        const mutedBanner = document.getElementById('mutedBanner');
         const connectionStatus = document.getElementById('connectionStatus');
 
         // Setup Chart.js
@@ -174,6 +181,24 @@
             data.push(newSpO2);
             if (data.length > maxDataPoints) data.shift(); // Remove oldest
             spo2Chart.update();
+        }
+
+        // Tracks the two independent Firebase flags that together decide
+        // which banner (if any) to show.
+        let spo2AlarmActive = false;
+        let buzzerMuted = false;
+
+        function updateAlarmBanners() {
+            if (spo2AlarmActive && buzzerMuted) {
+                alarmBanner.classList.add('hidden');
+                mutedBanner.classList.remove('hidden');
+            } else if (spo2AlarmActive) {
+                alarmBanner.classList.remove('hidden');
+                mutedBanner.classList.add('hidden');
+            } else {
+                alarmBanner.classList.add('hidden');
+                mutedBanner.classList.add('hidden');
+            }
         }
 
         // ==========================================
@@ -224,18 +249,25 @@
 
                 // Handle Alarm Logic
                 if (val > 0 && val <= 88) {
-                    alarmBanner.classList.remove('hidden');
+                    spo2AlarmActive = true;
                     currentSpO2Display.className = "text-2xl font-bold text-red-600";
                     spo2Chart.data.datasets[0].borderColor = '#DC2626'; // Red
                 } else if (val > 88) {
-                    alarmBanner.classList.add('hidden');
+                    spo2AlarmActive = false;
                     currentSpO2Display.className = "text-2xl font-bold text-green-500";
                     spo2Chart.data.datasets[0].borderColor = '#10B981'; // Green
                 }
+                updateAlarmBanners();
 
                 connectionStatus.textContent = "Live Data Connected";
                 connectionStatus.className = "px-4 py-2 rounded-full bg-green-100 text-green-800 font-semibold text-sm";
             }
+        });
+
+        // Listen for the ESP32's D25 mute button
+        onValue(ref(db, 'device/muted'), (snapshot) => {
+            buzzerMuted = snapshot.val() === true;
+            updateAlarmBanners();
         });
 
         // Listen for Motor Flow Index updates from ESP32
